@@ -75,7 +75,6 @@ function appHeader() {
     <button class="brand" data-action="go-home" aria-label="Przejdź na stronę główną">
       <span class="brand-mark">${icons.fish}</span><span>Fishki</span>
     </button>
-    <div class="nav-hint"><span>Twoje miejsce do nauki</span><span class="avatar">F</span></div>
   </header>`;
 }
 
@@ -96,18 +95,11 @@ function renderHome() {
   const folders = state.data.folders;
   const setCount = folders.reduce((sum, folder) => sum + folder.sets.length, 0);
   return `<main class="page">
-    <section class="hero">
-      <div>
-        <p class="eyebrow">Twoja biblioteka</p>
-        <h1>Ucz się tego, co dla Ciebie ważne.</h1>
-        <p class="hero-copy">Porządkuj fiszki w folderach, twórz własne zestawy i wracaj do słówek, które wymagają jeszcze chwili uwagi.</p>
-      </div>
-      <div class="hero-actions">
-        <button class="btn btn-primary btn-large" data-action="open-folder-modal">${icons.plus}<span>Nowy folder</span></button>
-      </div>
-    </section>
     <section>
-      <div class="section-head"><h2>Moje foldery <span class="count">${folders.length} ${plural(folders.length, "folder", "foldery", "folderów")} · ${setCount} ${plural(setCount, "zestaw", "zestawy", "zestawów")}</span></h2></div>
+      <div class="section-head home-section-head">
+        <h1 class="library-title">Moje foldery <span class="count">${folders.length} ${plural(folders.length, "folder", "foldery", "folderów")} · ${setCount} ${plural(setCount, "zestaw", "zestawy", "zestawów")}</span></h1>
+        <button class="btn btn-primary" data-action="open-folder-modal">${icons.plus}<span>Nowy folder</span></button>
+      </div>
       ${folders.length ? `<div class="grid">${folders.map(folderCard).join("")}</div>` : emptyState("folder")}
     </section>
   </main>`;
@@ -130,7 +122,7 @@ function renderFolder() {
   const folder = getFolder();
   if (!folder) { state.route = { page: "home", folderId: null, setId: null }; return renderHome(); }
   return `<main class="page">
-    <div class="breadcrumb"><button data-action="go-home">Moje foldery</button>${icons.arrow}<span>${escapeHtml(folder.name)}</span></div>
+    <nav class="page-nav" aria-label="Nawigacja"><button class="btn btn-secondary" data-action="go-home">${icons.back} Menu główne</button></nav>
     <section class="hero">
       <div><p class="eyebrow">Folder</p><h1>${escapeHtml(folder.name)}</h1><p class="hero-copy">Wybierz zestaw, aby przejrzeć słówka, albo rozpocznij nowy.</p></div>
       <div class="hero-actions"><button class="btn btn-primary btn-large" data-action="open-set-modal">${icons.plus}<span>Nowy zestaw</span></button></div>
@@ -163,7 +155,10 @@ function renderSetDetails() {
   if (!folder || !set) { state.route = { page: "home", folderId: null, setId: null }; return renderHome(); }
   const { known, unknown } = stats(set);
   return `<main class="page">
-    <div class="breadcrumb"><button data-action="go-home">Moje foldery</button>${icons.arrow}<button data-action="back-folder">${escapeHtml(folder.name)}</button>${icons.arrow}<span>${escapeHtml(set.name)}</span></div>
+    <nav class="page-nav" aria-label="Nawigacja">
+      <button class="btn btn-secondary" data-action="go-home">${icons.fish} Menu główne</button>
+      <button class="btn btn-secondary" data-action="back-folder">${icons.back} Wróć do folderu „${escapeHtml(folder.name)}”</button>
+    </nav>
     <section class="hero">
       <div><p class="eyebrow">Zestaw fiszek</p><h1>${escapeHtml(set.name)}</h1><p class="hero-copy">Przejrzyj swoje słówka i sprawdź postępy w nauce.</p></div>
       <div class="hero-actions"><button class="btn btn-primary btn-large" data-action="open-study" ${set.cards.length ? "" : "disabled"}>${icons.play}<span>Rozpocznij naukę</span></button></div>

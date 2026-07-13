@@ -455,12 +455,12 @@ function parseExcelFile(data, fileName) {
     const columns = detectExcelColumns(rows);
     if (!columns) return null;
     const cards = rows.slice(columns.headerRow + 1).map((row) => ({
-      front: row[columns.japaneseColumn] || "",
-      back: row[columns.translationColumn] || "",
-    })).filter((card) => card.front && card.back && containsJapanese(card.front));
+      front: row[columns.frontColumn] || "",
+      back: row[columns.backColumn] || "",
+    })).filter((card) => card.front && card.back);
     return cards.length ? { name: sheetName.trim() || "Słówka", cards } : null;
   }).filter(Boolean);
-  return { sets, suggestedFolder: "Japoński" };
+  return { sets, suggestedFolder: fileName.replace(/\.[^.]+$/, "").trim() || "Importowane słówka" };
 }
 
 function normalizeHeader(value) {
@@ -472,24 +472,26 @@ function containsJapanese(value) {
 }
 
 function detectExcelColumns(rows) {
-  const japaneseHeaders = ["単語", "日本語", "japonski", "japanese", "japonés", "japones", "kana", "hiragana", "katakana", "word"];
-  const translationHeaders = ["意味", "訳", "tlumaczenie", "polski", "polish", "translation", "meaning", "english", "angielski", "espanol", "spanish", "hiszpanski", "significado"];
+  const languageHeaders = ["単語", "日本語", "意味", "訳", "slowo", "wyrazenie", "tlumaczenie", "word", "front", "back", "translation", "meaning", "polski", "polish", "japonski", "japanese", "japones", "english", "angielski", "espanol", "spanish", "hiszpanski", "niemiecki", "german", "francuski", "french", "wloski", "italian", "portugalski", "portuguese", "ukrainski", "ukrainian", "kana", "hiragana", "katakana"];
   const searchLimit = Math.min(rows.length, 30);
 
   for (let rowIndex = 0; rowIndex < searchLimit; rowIndex++) {
     const headers = rows[rowIndex].map(normalizeHeader);
-    const japaneseColumn = headers.findIndex((header) => japaneseHeaders.some((name) => header === name || header.includes(name)));
-    const translationColumn = headers.findIndex((header, index) => index !== japaneseColumn && translationHeaders.some((name) => header === name || header.includes(name)));
-    if (japaneseColumn >= 0 && translationColumn >= 0) return { headerRow: rowIndex, japaneseColumn, translationColumn };
+    const matchingColumns = headers
+      .map((header, column) => languageHeaders.some((name) => header === name || header.includes(name)) ? column : -1)
+      .filter((column) => column >= 0);
+    if (matchingColumns.length >= 2) return { headerRow: rowIndex, frontColumn: matchingColumns[0], backColumn: matchingColumns[1] };
   }
 
   const maxColumns = Math.max(0, ...rows.map((row) => row.length));
   const samples = Array.from({ length: maxColumns }, (_, column) => rows.slice(0, 80).map((row) => row[column]).filter(Boolean));
-  const japaneseColumn = samples.map((values) => values.filter(containsJapanese).length).reduce((best, score, index, scores) => score > scores[best] ? index : best, 0);
-  const translationColumn = samples.map((values, column) => column === japaneseColumn ? -1 : values.filter((value) => !containsJapanese(value) && /[A-Za-zÀ-žĄĆĘŁŃÓŚŹŻąćęłńóśźż]/.test(value) && String(value).length > 1).length)
-    .reduce((best, score, index, scores) => score > scores[best] ? index : best, 0);
-  if (!samples[japaneseColumn]?.some(containsJapanese) || translationColumn === japaneseColumn) return null;
-  return { headerRow: -1, japaneseColumn, translationColumn };
+  const populatedColumns = samples
+    .map((values, column) => ({ column, count: values.length }))
+    .filter(({ count }) => count > 0)
+    .sort((a, b) => b.count - a.count || a.column - b.column);
+  if (populatedColumns.length < 2) return null;
+  const selected = populatedColumns.slice(0, 2).sort((a, b) => a.column - b.column);
+  return { headerRow: -1, frontColumn: selected[0].column, backColumn: selected[1].column };
 }
 
 function parseImportFile(text, fileName) {

@@ -100,7 +100,7 @@ function renderHome() {
         <h1 class="library-title">Moje foldery <span class="count">${folders.length} ${plural(folders.length, "folder", "foldery", "folderów")} · ${setCount} ${plural(setCount, "zestaw", "zestawy", "zestawów")}</span></h1>
         <button class="btn btn-primary" data-action="open-folder-modal">${icons.plus}<span>Nowy folder</span></button>
       </div>
-      ${folders.length ? `<div class="grid">${folders.map(folderCard).join("")}</div>` : emptyState("folder")}
+      ${folders.length ? `<div class="grid">${folders.map(folderCard).join("")}</div>` : `<p class="empty-library-note">Nie masz jeszcze żadnych folderów.</p>`}
     </section>
   </main>`;
 }
@@ -114,7 +114,6 @@ function folderCard(folder) {
     </div>
     <h3>${escapeHtml(folder.name)}</h3>
     <div class="meta">${folder.sets.length} ${plural(folder.sets.length, "zestaw", "zestawy", "zestawów")} · ${cardCount} ${plural(cardCount, "fiszka", "fiszki", "fiszek")}</div>
-    <div class="card-footer"><span class="open-label">Otwórz folder</span>${icons.arrow}</div>
   </article>`;
 }
 
@@ -204,6 +203,7 @@ function renderModal() {
   if (state.modal === "card") return cardModal();
   if (state.modal === "study-mode") return studyModeModal();
   if (state.modal === "finish") return finishModal();
+  if (state.modal === "confirm") return confirmationModal();
   return "";
 }
 
@@ -217,7 +217,7 @@ function cardsWizard() {
     <form data-form="add-draft-card">
       <div class="field"><label for="front-input">Słowo</label><input class="input" id="front-input" name="front" maxlength="120" placeholder="Np. la ventana" autocomplete="off" autofocus /></div>
       <div class="field"><label for="back-input">Tłumaczenie</label><input class="input" id="back-input" name="back" maxlength="120" placeholder="Np. okno" autocomplete="off" /></div>
-      <div class="modal-actions"><button class="btn btn-secondary" type="submit">${icons.plus} Dodaj nowe słówko</button><button class="btn btn-primary" type="button" data-action="create-set" ${state.draftCards.length ? "" : "disabled"}>Utwórz zestaw fiszek</button></div>
+      <div class="modal-actions"><button class="btn btn-secondary" type="submit">${icons.plus} Dodaj nowe słówko</button><button class="btn btn-primary" type="button" data-action="create-set">Utwórz zestaw fiszek</button></div>
     </form>
     ${state.draftCards.length ? `<div class="draft-list">${state.draftCards.map((card, index) => `<div class="draft-row"><strong>${escapeHtml(card.front)}</strong><span class="draft-arrow">→</span><span>${escapeHtml(card.back)}</span><button class="icon-btn" data-action="delete-draft" data-index="${index}" aria-label="Usuń">${icons.trash}</button></div>`).join("")}</div>` : ""}`,
     "modal-wide");
@@ -282,6 +282,13 @@ function finishModal() {
   return modalWrap(`<div class="finish-modal"><div class="finish-icon">${icons.spark}</div><h2>Runda ukończona!</h2><p class="modal-copy">Świetna robota. Każda powtórka przybliża Cię do celu.</p><div class="finish-stats"><div class="finish-stat"><strong style="color:var(--green)">${right}</strong><span>poprawnie</span></div><div class="finish-stat"><strong style="color:var(--coral)">${wrong}</strong><span>do powtórki</span></div></div><div class="modal-actions">${wrong ? `<button class="btn btn-secondary" data-action="repeat-wrong">Powtórz te, których nie wiedziałam</button>` : ""}<button class="btn btn-primary" data-action="finish-study">Zakończ naukę</button></div></div>`);
 }
 
+function confirmationModal() {
+  const confirmation = state.confirmAction;
+  if (!confirmation) return "";
+  return modalWrap(`<div class="modal-head"><div><h2>${escapeHtml(confirmation.title)}</h2><p class="modal-copy">${escapeHtml(confirmation.copy)}</p></div><button class="icon-btn close-btn" data-action="close-modal" aria-label="Zamknij">${icons.close}</button></div>
+    <div class="modal-actions"><button class="btn btn-secondary" data-action="close-modal">Anuluj</button><button class="btn btn-danger" data-action="execute-confirmation">${icons.trash} ${escapeHtml(confirmation.buttonLabel)}</button></div>`);
+}
+
 function plural(number, one, few, many) {
   if (number === 1) return one;
   if (number % 10 >= 2 && number % 10 <= 4 && !(number % 100 >= 12 && number % 100 <= 14)) return few;
@@ -314,12 +321,13 @@ function handleAction(event) {
   if (action === "open-card-modal") state.modal = "card";
   if (action === "close-modal" || action === "backdrop") state.modal = null;
   if (action === "cancel-wizard") { state.modal = null; state.draftCards = []; state.pendingSetName = ""; }
-  if (action === "delete-folder") deleteFolder(target.dataset.id);
-  if (action === "delete-set") deleteSet(target.dataset.id);
-  if (action === "delete-card") deleteCard(target.dataset.id);
+  if (action === "delete-folder") requestConfirmation("folder", target.dataset.id);
+  if (action === "delete-set") requestConfirmation("set", target.dataset.id);
+  if (action === "delete-card") requestConfirmation("card", target.dataset.id);
   if (action === "delete-draft") state.draftCards.splice(Number(target.dataset.index), 1);
-  if (action === "create-set") createSet();
-  if (action === "clear-results") clearResults();
+  if (action === "create-set") createSetFromWizard();
+  if (action === "clear-results") requestConfirmation("results");
+  if (action === "execute-confirmation") executeConfirmation();
   if (action === "open-study") { state.studyMode = "front"; state.modal = "study-mode"; }
   if (action === "select-mode") state.studyMode = target.dataset.mode;
   if (action === "start-study") startStudy();
@@ -372,26 +380,88 @@ function createSet() {
   state.modal = null; state.draftCards = []; state.pendingSetName = ""; toast("Zestaw fiszek jest gotowy");
 }
 
-function deleteFolder(folderId) {
-  const folder = state.data.folders.find((item) => item.id === folderId);
-  if (folder && confirm(`Usunąć folder „${folder.name}” razem ze wszystkimi zestawami?`)) {
-    state.data.folders = state.data.folders.filter((item) => item.id !== folderId); saveData(); toast("Folder został usunięty");
+function createSetFromWizard() {
+  const form = document.querySelector('[data-form="add-draft-card"]');
+  const values = form ? Object.fromEntries(new FormData(form)) : { front: "", back: "" };
+  const front = values.front.trim();
+  const back = values.back.trim();
+
+  if ((front && !back) || (!front && back)) {
+    showFormError(form, "Uzupełnij zarówno słowo, jak i tłumaczenie.");
+    return;
   }
+  if (front && back) {
+    state.draftCards.push({ id: id(), front, back, status: null });
+  }
+  if (!state.draftCards.length) {
+    showFormError(form, "Dodaj co najmniej jedną fiszkę.");
+    return;
+  }
+  createSet();
 }
 
-function deleteSet(setId) {
-  const folder = getFolder(); const set = getSet(folder, setId);
-  if (set && confirm(`Usunąć zestaw „${set.name}”?`)) { folder.sets = folder.sets.filter((item) => item.id !== setId); saveData(); toast("Zestaw został usunięty"); }
+function requestConfirmation(kind, targetId = null) {
+  let title = "Potwierdź działanie";
+  let copy = "Tej operacji nie można cofnąć.";
+  let buttonLabel = "Usuń";
+
+  if (kind === "folder") {
+    const folder = state.data.folders.find((item) => item.id === targetId);
+    if (!folder) return;
+    title = "Usunąć folder?";
+    copy = `Folder „${folder.name}” oraz wszystkie znajdujące się w nim zestawy zostaną usunięte.`;
+    buttonLabel = "Usuń folder";
+  }
+  if (kind === "set") {
+    const set = getSet(getFolder(), targetId);
+    if (!set) return;
+    title = "Usunąć zestaw?";
+    copy = `Zestaw „${set.name}” oraz wszystkie jego fiszki zostaną usunięte.`;
+    buttonLabel = "Usuń zestaw";
+  }
+  if (kind === "card") {
+    const card = getSet()?.cards.find((item) => item.id === targetId);
+    if (!card) return;
+    title = "Usunąć fiszkę?";
+    copy = `Fiszka „${card.front}” zostanie usunięta z zestawu.`;
+    buttonLabel = "Usuń fiszkę";
+  }
+  if (kind === "results") {
+    title = "Wyczyścić wyniki?";
+    copy = "Wszystkie oznaczenia odpowiedzi w tym zestawie zostaną wyzerowane.";
+    buttonLabel = "Wyczyść wszystko";
+  }
+
+  state.confirmAction = { kind, targetId, title, copy, buttonLabel };
+  state.modal = "confirm";
 }
 
-function deleteCard(cardId) {
-  const set = getSet(); const card = set.cards.find((item) => item.id === cardId);
-  if (card && confirm(`Usunąć fiszkę „${card.front}”?`)) { set.cards = set.cards.filter((item) => item.id !== cardId); saveData(); toast("Fiszka została usunięta"); }
-}
+function executeConfirmation() {
+  const confirmation = state.confirmAction;
+  if (!confirmation) return;
 
-function clearResults() {
-  if (!confirm("Wyczyścić wszystkie wyniki w tym zestawie i zacząć od początku?")) return;
-  getSet().cards.forEach((card) => card.status = null); saveData(); toast("Wyniki zostały wyczyszczone");
+  if (confirmation.kind === "folder") {
+    state.data.folders = state.data.folders.filter((item) => item.id !== confirmation.targetId);
+    toast("Folder został usunięty");
+  }
+  if (confirmation.kind === "set") {
+    const folder = getFolder();
+    folder.sets = folder.sets.filter((item) => item.id !== confirmation.targetId);
+    toast("Zestaw został usunięty");
+  }
+  if (confirmation.kind === "card") {
+    const set = getSet();
+    set.cards = set.cards.filter((item) => item.id !== confirmation.targetId);
+    toast("Fiszka została usunięta");
+  }
+  if (confirmation.kind === "results") {
+    getSet().cards.forEach((card) => card.status = null);
+    toast("Wyniki zostały wyczyszczone");
+  }
+
+  saveData();
+  state.confirmAction = null;
+  state.modal = null;
 }
 
 function startStudy() {

@@ -137,6 +137,7 @@ h1 {
 .section-head h2 { margin: 0; font: 800 22px/1.2 "Manrope", sans-serif; }
 .home-section-head { margin-bottom: 28px; }
 .library-title { margin: 0; font-size: clamp(28px, 4vw, 38px); }
+.empty-library-note { margin: 6px 0 0; color: var(--muted); font-size: 15px; }
 .count { margin-left: 8px; color: var(--muted); font-size: 14px; font-weight: 600; }
 
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }

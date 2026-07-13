@@ -26,6 +26,8 @@ const state = {
   study: null,
 };
 
+let excelLibraryPromise = null;
+
 function loadData() {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -406,8 +408,9 @@ function handleImportFile(event) {
   if (!file) return;
   const reader = new FileReader();
   const isExcel = /\.(xlsx|xls)$/i.test(file.name);
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
+      if (isExcel) await loadExcelLibrary();
       const parsed = isExcel
         ? parseExcelFile(reader.result, file.name)
         : parseImportFile(String(reader.result || ""), file.name);
@@ -423,6 +426,23 @@ function handleImportFile(event) {
   reader.onerror = () => toast("Nie udało się odczytać pliku");
   if (isExcel) reader.readAsArrayBuffer(file);
   else reader.readAsText(file, "UTF-8");
+}
+
+function loadExcelLibrary() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  if (excelLibraryPromise) return excelLibraryPromise;
+  excelLibraryPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "xlsx.full.min.js";
+    script.async = true;
+    script.onload = () => window.XLSX ? resolve(window.XLSX) : reject(new Error("Nie udało się uruchomić modułu Excela."));
+    script.onerror = () => {
+      excelLibraryPromise = null;
+      reject(new Error("Nie udało się załadować modułu obsługi Excela."));
+    };
+    document.head.appendChild(script);
+  });
+  return excelLibraryPromise;
 }
 
 function parseExcelFile(data, fileName) {

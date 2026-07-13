@@ -437,4 +437,28 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+window.handleAndroidBack = function () {
+  if (state.modal) {
+    state.modal = null;
+    render();
+    return true;
+  }
+  if (state.route.page === "study") {
+    finishStudy();
+    render();
+    return true;
+  }
+  if (state.route.page === "set") {
+    state.route = { page: "folder", folderId: state.route.folderId, setId: null };
+    render();
+    return true;
+  }
+  if (state.route.page === "folder") {
+    state.route = { page: "home", folderId: null, setId: null };
+    render();
+    return true;
+  }
+  return false;
+};
+
 render();

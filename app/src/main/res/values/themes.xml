@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Fishki.Base" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">@color/fishki_background</item>
+        <item name="android:colorAccent">@color/fishki_green</item>
+        <item name="android:statusBarColor">@color/fishki_background</item>
+        <item name="android:navigationBarColor">@color/fishki_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
+    <style name="Theme.Fishki" parent="Theme.Fishki.Base" />
+</resources>

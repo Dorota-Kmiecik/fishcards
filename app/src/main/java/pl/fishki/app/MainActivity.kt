@@ -17,9 +17,15 @@ import android.webkit.WebChromeClient
 import android.webkit.WebViewClient
 import android.webkit.ValueCallback
 import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.TextView
+import android.view.Gravity
 
 class MainActivity : Activity() {
     private lateinit var webView: WebView
+    private lateinit var loadingView: View
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -32,6 +38,7 @@ class MainActivity : Activity() {
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
             setBackgroundColor(Color.rgb(247, 248, 243))
+            alpha = 0f
 
             settings.apply {
                 javaScriptEnabled = true
@@ -54,6 +61,8 @@ class MainActivity : Activity() {
         val container = FrameLayout(this).apply {
             setBackgroundColor(Color.rgb(247, 248, 243))
             addView(webView)
+            loadingView = createLoadingView()
+            addView(loadingView)
         }
         applySystemBarInsets(container)
         setContentView(container)
@@ -68,15 +77,45 @@ class MainActivity : Activity() {
             }
         }
 
-        if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null) {
-            webView.loadUrl(APP_URL)
-        }
+        webView.loadUrl(APP_URL)
     }
 
-    override fun onSaveInstanceState(outState: Bundle) {
-        webView.saveState(outState)
-        super.onSaveInstanceState(outState)
+    private fun createLoadingView(): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        setBackgroundColor(Color.rgb(247, 248, 243))
+        layoutParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
+
+        addView(ImageView(this@MainActivity).apply {
+            setImageResource(R.mipmap.ic_launcher)
+            layoutParams = LinearLayout.LayoutParams(dp(72), dp(72)).apply {
+                bottomMargin = dp(14)
+            }
+        })
+        addView(TextView(this@MainActivity).apply {
+            text = getString(R.string.app_name)
+            textSize = 24f
+            setTextColor(Color.rgb(6, 43, 99))
+            gravity = Gravity.CENTER
+        })
+        addView(ProgressBar(this@MainActivity).apply {
+            isIndeterminate = true
+            layoutParams = LinearLayout.LayoutParams(dp(32), dp(32)).apply {
+                topMargin = dp(18)
+            }
+        })
     }
+
+    private fun showWebApp() {
+        if (!::loadingView.isInitialized || loadingView.visibility == View.GONE) return
+        webView.animate().alpha(1f).setDuration(120).start()
+        loadingView.visibility = View.GONE
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     @Deprecated("Wymagane przez systemowy wybór plików WebView")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -154,6 +193,16 @@ class MainActivity : Activity() {
     }
 
     private inner class FishkiWebViewClient : WebViewClient() {
+        override fun onPageCommitVisible(view: WebView, url: String) {
+            super.onPageCommitVisible(view, url)
+            showWebApp()
+        }
+
+        override fun onPageFinished(view: WebView, url: String) {
+            super.onPageFinished(view, url)
+            showWebApp()
+        }
+
         override fun shouldOverrideUrlLoading(
             view: WebView,
             request: WebResourceRequest

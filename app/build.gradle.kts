@@ -43,7 +43,9 @@ val syncWebAssets by tasks.registering(Sync::class) {
         rootProject.file("index.html"),
         rootProject.file("app.js"),
         rootProject.file("styles.css"),
-        rootProject.file("xlsx.full.min.js")
+        rootProject.file("xlsx.full.min.js"),
+        rootProject.file("pdf.min.js"),
+        rootProject.file("pdf.worker.min.js")
     )
     into(generatedWebAssets)
 }

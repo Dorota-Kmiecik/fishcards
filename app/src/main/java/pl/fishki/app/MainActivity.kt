@@ -189,7 +189,11 @@ class MainActivity : Activity() {
                         "application/vnd.ms-excel",
                         "text/csv",
                         "text/plain",
-                        "application/json"
+                        "application/json",
+                        "application/pdf",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        "application/msword",
+                        "application/rtf"
                     )
                 )
             }

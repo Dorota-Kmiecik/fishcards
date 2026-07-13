@@ -11,6 +11,8 @@ Projekt można otworzyć bezpośrednio w Android Studio.
 
 Interfejs aplikacji znajduje się w plikach `index.html`, `styles.css` i `app.js` w katalogu głównym. Gradle dołącza te pliki do APK jako zasoby. Dane użytkownika są przechowywane lokalnie przez WebView i pozostają dostępne po ponownym uruchomieniu aplikacji.
 
+Importer obsługuje pliki Excel (`.xlsx`, `.xls`), CSV, TXT i JSON. W Excelu automatycznie rozpoznaje kolumnę japońską oraz tłumaczenie po polsku, hiszpańsku lub angielsku. Wszystkie arkusze trafiają do jednego folderu „Japoński”, a każdy arkusz staje się osobnym zestawem fiszek. Pliki są przetwarzane lokalnie na urządzeniu.
+
 ## Wersja produkcyjna
 
 W Android Studio wybierz **Build > Generate Signed App Bundle or APK**. Do publikacji w Google Play wybierz Android App Bundle (`.aab`) i podpisz go własnym kluczem wydawcy.

@@ -137,6 +137,7 @@ h1 {
 .section-head h2 { margin: 0; font: 800 22px/1.2 "Manrope", sans-serif; }
 .home-section-head { margin-bottom: 28px; }
 .library-title { margin: 0; font-size: clamp(28px, 4vw, 38px); }
+.home-actions { display: flex; gap: 10px; }
 .empty-library-note { margin: 6px 0 0; color: var(--muted); font-size: 15px; }
 .count { margin-left: 8px; color: var(--muted); font-size: 14px; font-weight: 600; }
 
@@ -268,6 +269,16 @@ h1 {
 .draft-row:last-child { border: 0; }
 .draft-arrow { color: #a4aca6; text-align: center; }
 .draft-row .icon-btn { width: 32px; height: 32px; }
+.import-preview { display: grid; gap: 8px; margin-top: 6px; padding: 15px; border: 1px solid var(--line); border-radius: 14px; background: #fafbf8; }
+.import-preview > strong { margin-bottom: 2px; font-size: 14px; }
+.import-preview-row { display: grid; grid-template-columns: minmax(0,1fr) 20px minmax(0,1fr); gap: 8px; color: var(--muted); font-size: 13px; }
+.import-preview-row span { overflow-wrap: anywhere; }
+.import-preview-row span:nth-child(2) { text-align: center; }
+.import-preview small { color: var(--muted); }
+.import-sets { display: grid; gap: 8px; margin-top: 6px; padding: 15px; border: 1px solid var(--line); border-radius: 14px; background: var(--mint-soft); }
+.import-sets > strong { margin-bottom: 2px; font-size: 14px; }
+.import-sets > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
+.import-sets small { flex: 0 0 auto; color: var(--muted); }
 
 .mode-options { display: grid; gap: 10px; margin-top: 22px; }
 .mode-option { display: grid; grid-template-columns: 44px 1fr 24px; align-items: center; gap: 13px; padding: 15px; border: 1.5px solid var(--line); border-radius: 15px; cursor: pointer; }
@@ -330,6 +341,7 @@ h1 {
   .topbar { height: 70px; padding: 0 19px; }
   .page { width: min(100% - 28px, 1184px); padding-top: 28px; }
   .home-section-head { align-items: stretch; flex-direction: column; margin-bottom: 20px; }
+  .home-actions { display: grid; grid-template-columns: 1fr; }
   .home-section-head .btn { width: 100%; }
   .library-title { font-size: 29px; }
   .library-title .count { display: block; margin: 8px 0 0; }

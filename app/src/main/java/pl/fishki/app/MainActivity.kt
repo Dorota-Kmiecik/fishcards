@@ -13,11 +13,14 @@ import android.view.WindowInsets
 import android.window.OnBackInvokedDispatcher
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
+import android.webkit.WebChromeClient
 import android.webkit.WebViewClient
+import android.webkit.ValueCallback
 import android.widget.FrameLayout
 
 class MainActivity : Activity() {
     private lateinit var webView: WebView
+    private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,7 +37,8 @@ class MainActivity : Activity() {
                 javaScriptEnabled = true
                 domStorageEnabled = true
                 allowFileAccess = true
-                allowContentAccess = false
+                // Wymagane, aby WebView mógł odczytać plik wybrany przez systemowy selektor.
+                allowContentAccess = true
                 setSupportZoom(false)
                 builtInZoomControls = false
                 displayZoomControls = false
@@ -44,6 +48,7 @@ class MainActivity : Activity() {
             }
 
             webViewClient = FishkiWebViewClient()
+            webChromeClient = FishkiWebChromeClient()
         }
 
         val container = FrameLayout(this).apply {
@@ -73,6 +78,21 @@ class MainActivity : Activity() {
         super.onSaveInstanceState(outState)
     }
 
+    @Deprecated("Wymagane przez systemowy wybór plików WebView")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == FILE_CHOOSER_REQUEST) {
+            val result = if (resultCode == RESULT_OK) {
+                WebChromeClient.FileChooserParams.parseResult(resultCode, data)
+            } else {
+                null
+            }
+            fileChooserCallback?.onReceiveValue(result)
+            fileChooserCallback = null
+            return
+        }
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
     @SuppressLint("GestureBackNavigation")
     @Deprecated("Obsługiwane dla zgodności z Androidem 7–12")
     override fun onBackPressed() {
@@ -90,6 +110,8 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        fileChooserCallback?.onReceiveValue(null)
+        fileChooserCallback = null
         webView.apply {
             stopLoading()
             loadUrl("about:blank")
@@ -147,7 +169,44 @@ class MainActivity : Activity() {
         }
     }
 
+    private inner class FishkiWebChromeClient : WebChromeClient() {
+        @Suppress("DEPRECATION")
+        override fun onShowFileChooser(
+            webView: WebView,
+            callback: ValueCallback<Array<Uri>>,
+            fileChooserParams: FileChooserParams
+        ): Boolean {
+            fileChooserCallback?.onReceiveValue(null)
+            fileChooserCallback = callback
+
+            val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "*/*"
+                putExtra(
+                    Intent.EXTRA_MIME_TYPES,
+                    arrayOf(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "application/vnd.ms-excel",
+                        "text/csv",
+                        "text/plain",
+                        "application/json"
+                    )
+                )
+            }
+
+            return try {
+                startActivityForResult(picker, FILE_CHOOSER_REQUEST)
+                true
+            } catch (_: Exception) {
+                fileChooserCallback?.onReceiveValue(null)
+                fileChooserCallback = null
+                false
+            }
+        }
+    }
+
     companion object {
         private const val APP_URL = "file:///android_asset/index.html"
+        private const val FILE_CHOOSER_REQUEST = 1001
     }
 }

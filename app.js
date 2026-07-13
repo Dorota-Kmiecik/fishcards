@@ -12,6 +12,7 @@ const icons = {
   check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m5 12 4 4L19 6"/></svg>`,
   circle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg>`,
   play: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8 5.5v13l11-6.5-11-6.5Z"/></svg>`,
+  upload: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 14v5h14v-5"/></svg>`,
   flip: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 7v5h-5"/><path d="M4.8 9a8 8 0 0 1 13-3l2.2 2M4 17v-5h5"/><path d="M19.2 15a8 8 0 0 1-13 3L4 16"/></svg>`,
   spark: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="m12 2 1.5 5.3L19 9l-5.5 1.7L12 16l-1.5-5.3L5 9l5.5-1.7L12 2Z"/><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z"/></svg>`,
 };
@@ -21,6 +22,7 @@ const state = {
   route: { page: "home", folderId: null, setId: null },
   modal: null,
   draftCards: [],
+  importDraft: null,
   study: null,
 };
 
@@ -98,7 +100,11 @@ function renderHome() {
     <section>
       <div class="section-head home-section-head">
         <h1 class="library-title">Moje foldery <span class="count">${folders.length} ${plural(folders.length, "folder", "foldery", "folderów")} · ${setCount} ${plural(setCount, "zestaw", "zestawy", "zestawów")}</span></h1>
-        <button class="btn btn-primary" data-action="open-folder-modal">${icons.plus}<span>Nowy folder</span></button>
+        <div class="home-actions">
+          <button class="btn btn-secondary" data-action="choose-import-file">${icons.upload}<span>Załącz plik</span></button>
+          <button class="btn btn-primary" data-action="open-folder-modal">${icons.plus}<span>Nowy folder</span></button>
+          <input id="file-import-input" type="file" accept=".xlsx,.xls,.csv,.txt,.json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/plain,application/json" hidden />
+        </div>
       </div>
       ${folders.length ? `<div class="grid">${folders.map(folderCard).join("")}</div>` : `<p class="empty-library-note">Nie masz jeszcze żadnych folderów.</p>`}
     </section>
@@ -204,6 +210,7 @@ function renderModal() {
   if (state.modal === "study-mode") return studyModeModal();
   if (state.modal === "finish") return finishModal();
   if (state.modal === "confirm") return confirmationModal();
+  if (state.modal === "import") return importModal();
   return "";
 }
 
@@ -289,6 +296,26 @@ function confirmationModal() {
     <div class="modal-actions"><button class="btn btn-secondary" data-action="close-modal">Anuluj</button><button class="btn btn-danger" data-action="execute-confirmation">${icons.trash} ${escapeHtml(confirmation.buttonLabel)}</button></div>`);
 }
 
+function importModal() {
+  const draft = state.importDraft;
+  if (!draft) return "";
+  const totalCards = draft.sets.reduce((sum, set) => sum + set.cards.length, 0);
+  const preview = draft.sets.flatMap((set) => set.cards).slice(0, 5);
+  const multipleSets = draft.sets.length > 1;
+  const setsSummary = multipleSets
+    ? `<div class="import-sets"><strong>Zestawy z arkuszy</strong>${draft.sets.map((set) => `<div><span>${escapeHtml(set.name)}</span><small>${set.cards.length} ${plural(set.cards.length, "fiszka", "fiszki", "fiszek")}</small></div>`).join("")}</div>`
+    : "";
+  const setNameField = multipleSets ? "" : `<div class="field"><label for="import-set-name">Nazwa zestawu</label><input class="input" id="import-set-name" name="set_name" maxlength="60" value="${escapeHtml(draft.sets[0].name)}" autocomplete="off" /></div>`;
+  return modalWrap(`<div class="modal-head"><div><p class="eyebrow">Import z pliku</p><h2>${escapeHtml(draft.fileName)}</h2><p class="modal-copy">Znaleziono ${totalCards} ${plural(totalCards, "fiszkę", "fiszki", "fiszek")} w ${draft.sets.length} ${plural(draft.sets.length, "zestawie", "zestawach", "zestawach")}.</p></div><button class="icon-btn close-btn" data-action="close-import" aria-label="Zamknij">${icons.close}</button></div>
+    <form data-form="import-file">
+      <div class="field"><label for="import-folder-name">Nazwa folderu</label><input class="input" id="import-folder-name" name="folder_name" maxlength="60" value="${escapeHtml(draft.suggestedFolder)}" autocomplete="off" autofocus /></div>
+      ${setNameField}
+      ${setsSummary}
+      <div class="import-preview"><strong>Podgląd fiszek</strong>${preview.map((card) => `<div class="import-preview-row"><span>${escapeHtml(card.front)}</span><span>→</span><span>${escapeHtml(card.back)}</span></div>`).join("")}${totalCards > preview.length ? `<small>i jeszcze ${totalCards - preview.length}…</small>` : ""}</div>
+      <div class="modal-actions"><button type="button" class="btn btn-secondary" data-action="close-import">Anuluj</button><button class="btn btn-primary" type="submit">${icons.upload} Utwórz folder i fiszki</button></div>
+    </form>`, "modal-wide");
+}
+
 function plural(number, one, few, many) {
   if (number === 1) return one;
   if (number % 10 >= 2 && number % 10 <= 4 && !(number % 100 >= 12 && number % 100 <= 14)) return few;
@@ -303,6 +330,7 @@ function bindEvents() {
     });
   });
   document.querySelectorAll("form[data-form]").forEach((form) => form.addEventListener("submit", handleForm));
+  document.querySelector("#file-import-input")?.addEventListener("change", handleImportFile);
   const autofocus = document.querySelector("[autofocus]");
   if (autofocus) setTimeout(() => autofocus.focus(), 0);
 }
@@ -319,7 +347,9 @@ function handleAction(event) {
   if (action === "open-folder-modal") state.modal = "folder";
   if (action === "open-set-modal") state.modal = "set";
   if (action === "open-card-modal") state.modal = "card";
+  if (action === "choose-import-file") document.querySelector("#file-import-input")?.click();
   if (action === "close-modal" || action === "backdrop") state.modal = null;
+  if (action === "close-import") { state.modal = null; state.importDraft = null; }
   if (action === "cancel-wizard") { state.modal = null; state.draftCards = []; state.pendingSetName = ""; }
   if (action === "delete-folder") requestConfirmation("folder", target.dataset.id);
   if (action === "delete-set") requestConfirmation("set", target.dataset.id);
@@ -362,7 +392,166 @@ function handleForm(event) {
     getSet().cards.push({ id: id(), front: values.front.trim(), back: values.back.trim(), status: null });
     saveData(); state.modal = null; toast("Fiszka została dodana");
   }
+  if (type === "import-file") {
+    const folderName = values.folder_name.trim();
+    const setName = (values.set_name || "").trim();
+    if (!folderName || (state.importDraft.sets.length === 1 && !setName)) return showFormError(form, "Wpisz nazwę folderu i zestawu.");
+    importCards(folderName, setName);
+  }
   render();
+}
+
+function handleImportFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+  reader.onload = () => {
+    try {
+      const parsed = isExcel
+        ? parseExcelFile(reader.result, file.name)
+        : parseImportFile(String(reader.result || ""), file.name);
+      if (!parsed.sets.length || !parsed.sets.some((set) => set.cards.length)) throw new Error("Nie znaleziono par słowo–tłumaczenie.");
+      state.importDraft = { ...parsed, fileName: file.name };
+      state.modal = "import";
+      render();
+    } catch (error) {
+      toast(error.message || "Nie udało się odczytać pliku");
+      event.target.value = "";
+    }
+  };
+  reader.onerror = () => toast("Nie udało się odczytać pliku");
+  if (isExcel) reader.readAsArrayBuffer(file);
+  else reader.readAsText(file, "UTF-8");
+}
+
+function parseExcelFile(data, fileName) {
+  if (typeof XLSX === "undefined") throw new Error("Moduł obsługi Excela nie został załadowany.");
+  const workbook = XLSX.read(data, { type: "array" });
+  if (!workbook.SheetNames.length) throw new Error("Plik Excel nie zawiera żadnego arkusza.");
+  const sets = workbook.SheetNames.map((sheetName) => {
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false, defval: "" })
+      .map((row) => row.map((value) => String(value).trim()));
+    const columns = detectExcelColumns(rows);
+    if (!columns) return null;
+    const cards = rows.slice(columns.headerRow + 1).map((row) => ({
+      front: row[columns.japaneseColumn] || "",
+      back: row[columns.translationColumn] || "",
+    })).filter((card) => card.front && card.back && containsJapanese(card.front));
+    return cards.length ? { name: sheetName.trim() || "Słówka", cards } : null;
+  }).filter(Boolean);
+  return { sets, suggestedFolder: "Japoński" };
+}
+
+function normalizeHeader(value) {
+  return String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function containsJapanese(value) {
+  return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/.test(String(value || ""));
+}
+
+function detectExcelColumns(rows) {
+  const japaneseHeaders = ["単語", "日本語", "japonski", "japanese", "japonés", "japones", "kana", "hiragana", "katakana", "word"];
+  const translationHeaders = ["意味", "訳", "tlumaczenie", "polski", "polish", "translation", "meaning", "english", "angielski", "espanol", "spanish", "hiszpanski", "significado"];
+  const searchLimit = Math.min(rows.length, 30);
+
+  for (let rowIndex = 0; rowIndex < searchLimit; rowIndex++) {
+    const headers = rows[rowIndex].map(normalizeHeader);
+    const japaneseColumn = headers.findIndex((header) => japaneseHeaders.some((name) => header === name || header.includes(name)));
+    const translationColumn = headers.findIndex((header, index) => index !== japaneseColumn && translationHeaders.some((name) => header === name || header.includes(name)));
+    if (japaneseColumn >= 0 && translationColumn >= 0) return { headerRow: rowIndex, japaneseColumn, translationColumn };
+  }
+
+  const maxColumns = Math.max(0, ...rows.map((row) => row.length));
+  const samples = Array.from({ length: maxColumns }, (_, column) => rows.slice(0, 80).map((row) => row[column]).filter(Boolean));
+  const japaneseColumn = samples.map((values) => values.filter(containsJapanese).length).reduce((best, score, index, scores) => score > scores[best] ? index : best, 0);
+  const translationColumn = samples.map((values, column) => column === japaneseColumn ? -1 : values.filter((value) => !containsJapanese(value) && /[A-Za-zÀ-žĄĆĘŁŃÓŚŹŻąćęłńóśźż]/.test(value) && String(value).length > 1).length)
+    .reduce((best, score, index, scores) => score > scores[best] ? index : best, 0);
+  if (!samples[japaneseColumn]?.some(containsJapanese) || translationColumn === japaneseColumn) return null;
+  return { headerRow: -1, japaneseColumn, translationColumn };
+}
+
+function parseImportFile(text, fileName) {
+  const cleanName = fileName.replace(/\.[^.]+$/, "").trim() || "Importowane słówka";
+  if (fileName.toLowerCase().endsWith(".json")) {
+    const source = JSON.parse(text);
+    const rows = Array.isArray(source) ? source : source.cards;
+    if (!Array.isArray(rows)) throw new Error("Plik JSON powinien zawierać listę fiszek.");
+    const cards = rows.map((row) => ({
+      front: String(row.front ?? row.word ?? row.slowo ?? row.słowo ?? "").trim(),
+      back: String(row.back ?? row.translation ?? row.tlumaczenie ?? row.tłumaczenie ?? "").trim(),
+    })).filter((card) => card.front && card.back);
+    return { sets: [{ name: String(source.set ?? source.setName ?? "Słówka").trim(), cards }], suggestedFolder: String(source.folder ?? cleanName).trim() };
+  }
+
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) return { sets: [], suggestedFolder: cleanName };
+  const separator = detectSeparator(lines);
+  const rows = lines.map((line) => splitImportLine(line, separator)).filter((row) => row.length >= 2);
+  if (rows.length && looksLikeHeader(rows[0])) rows.shift();
+  const cards = rows.map((row) => ({ front: row[0].trim(), back: row.slice(1).join(separator === " — " ? " — " : " ").trim() }))
+    .filter((card) => card.front && card.back);
+  return { sets: [{ name: "Słówka", cards }], suggestedFolder: cleanName };
+}
+
+function detectSeparator(lines) {
+  const sample = lines.slice(0, 5).join("\n");
+  if (sample.includes("\t")) return "\t";
+  if (sample.includes(";")) return ";";
+  if (sample.includes(",")) return ",";
+  if (sample.includes(" — ")) return " — ";
+  if (sample.includes(" - ")) return " - ";
+  if (sample.includes("=")) return "=";
+  throw new Error("Nie rozpoznano separatora. Użyj przecinka, średnika, tabulatora albo myślnika.");
+}
+
+function splitImportLine(line, separator) {
+  if (separator.length > 1) return line.split(separator).map((value) => value.trim());
+  const result = [];
+  let current = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index++) {
+    const char = line[index];
+    if (char === '"' && line[index + 1] === '"' && quoted) { current += '"'; index++; }
+    else if (char === '"') quoted = !quoted;
+    else if (char === separator && !quoted) { result.push(current.trim()); current = ""; }
+    else current += char;
+  }
+  result.push(current.trim());
+  return result;
+}
+
+function looksLikeHeader(row) {
+  const first = row[0].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const second = row[1].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return ["slowo", "word", "front", "japonski", "japanese"].some((name) => first.includes(name))
+    && ["tlumaczenie", "translation", "back", "polski", "polish"].some((name) => second.includes(name));
+}
+
+function importCards(folderName, setName) {
+  const baseName = folderName;
+  let uniqueName = baseName;
+  let suffix = 2;
+  while (state.data.folders.some((folder) => folder.name.toLowerCase() === uniqueName.toLowerCase())) {
+    uniqueName = `${baseName} (${suffix++})`;
+  }
+  const folder = {
+    id: id(),
+    name: uniqueName,
+    sets: state.importDraft.sets.map((set, index) => ({
+      id: id(),
+      name: state.importDraft.sets.length === 1 && setName ? setName : set.name,
+      cards: set.cards.map((card) => ({ id: id(), front: card.front, back: card.back, status: null })),
+    })),
+  };
+  state.data.folders.push(folder);
+  saveData();
+  state.importDraft = null;
+  state.modal = null;
+  state.route = { page: "folder", folderId: folder.id, setId: null };
+  const totalCards = folder.sets.reduce((sum, set) => sum + set.cards.length, 0);
+  toast(`Zaimportowano ${totalCards} ${plural(totalCards, "fiszkę", "fiszki", "fiszek")}`);
 }
 
 function showFormError(form, message) {

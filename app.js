@@ -27,6 +27,7 @@ const state = {
 };
 
 let excelLibraryPromise = null;
+let pdfLibraryPromise = null;
 
 function loadData() {
   try {
@@ -105,7 +106,7 @@ function renderHome() {
         <div class="home-actions">
           <button class="btn btn-secondary" data-action="choose-import-file">${icons.upload}<span>Załącz plik</span></button>
           <button class="btn btn-primary" data-action="open-folder-modal">${icons.plus}<span>Nowy folder</span></button>
-          <input id="file-import-input" type="file" accept=".xlsx,.xls,.csv,.txt,.json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/plain,application/json" hidden />
+          <input id="file-import-input" type="file" accept=".xlsx,.xls,.csv,.txt,.json,.pdf,.docx,.doc,.rtf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/plain,application/json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/rtf" hidden />
         </div>
       </div>
       ${folders.length ? `<div class="grid">${folders.map(folderCard).join("")}</div>` : `<p class="empty-library-note">Nie masz jeszcze żadnych folderów.</p>`}
@@ -408,12 +409,19 @@ function handleImportFile(event) {
   if (!file) return;
   const reader = new FileReader();
   const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+  const isPdf = /\.pdf$/i.test(file.name);
+  const isDocx = /\.docx$/i.test(file.name);
+  const isBinary = isExcel || isPdf || isDocx;
   reader.onload = async () => {
     try {
       if (isExcel) await loadExcelLibrary();
-      const parsed = isExcel
-        ? parseExcelFile(reader.result, file.name)
-        : parseImportFile(String(reader.result || ""), file.name);
+      if (isPdf) await loadPdfLibrary();
+      if (isDocx) await loadExcelLibrary();
+      if (/\.doc$/i.test(file.name)) throw new Error("Stary format .doc nie jest obsługiwany. Zapisz dokument jako .docx i spróbuj ponownie.");
+      const parsed = isExcel ? parseExcelFile(reader.result, file.name)
+        : isPdf ? await parsePdfFile(reader.result, file.name)
+        : isDocx ? parseDocxFile(reader.result, file.name)
+        : parseImportFile(parseRtfIfNeeded(String(reader.result || ""), file.name), file.name);
       if (!parsed.sets.length || !parsed.sets.some((set) => set.cards.length)) throw new Error("Nie znaleziono par słowo–tłumaczenie.");
       state.importDraft = { ...parsed, fileName: file.name };
       state.modal = "import";
@@ -424,8 +432,82 @@ function handleImportFile(event) {
     }
   };
   reader.onerror = () => toast("Nie udało się odczytać pliku");
-  if (isExcel) reader.readAsArrayBuffer(file);
+  if (isBinary) reader.readAsArrayBuffer(file);
   else reader.readAsText(file, "UTF-8");
+}
+
+function loadPdfLibrary() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (pdfLibraryPromise) return pdfLibraryPromise;
+  pdfLibraryPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "pdf.min.js";
+    script.async = true;
+    script.onload = () => {
+      if (!window.pdfjsLib) return reject(new Error("Nie udało się uruchomić modułu PDF."));
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = "pdf.worker.min.js";
+      resolve(window.pdfjsLib);
+    };
+    script.onerror = () => {
+      pdfLibraryPromise = null;
+      reject(new Error("Nie udało się załadować modułu obsługi PDF."));
+    };
+    document.head.appendChild(script);
+  });
+  return pdfLibraryPromise;
+}
+
+async function parsePdfFile(data, fileName) {
+  const document = await pdfjsLib.getDocument({ data: new Uint8Array(data) }).promise;
+  const lines = [];
+  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
+    const page = await document.getPage(pageNumber);
+    const content = await page.getTextContent();
+    const rows = [];
+    content.items.filter((item) => item.str?.trim()).forEach((item) => {
+      const x = item.transform[4];
+      const y = item.transform[5];
+      let row = rows.find((candidate) => Math.abs(candidate.y - y) < 3);
+      if (!row) { row = { y, items: [] }; rows.push(row); }
+      row.items.push({ x, width: item.width || 0, text: item.str.trim() });
+    });
+    rows.sort((a, b) => b.y - a.y).forEach((row) => {
+      const items = row.items.sort((a, b) => a.x - b.x);
+      if (items.length < 2) lines.push(items[0]?.text || "");
+      else {
+        const gaps = items.slice(1).map((item, index) => ({ index, gap: item.x - (items[index].x + items[index].width) }));
+        const splitAt = gaps.sort((a, b) => b.gap - a.gap)[0]?.index ?? 0;
+        lines.push(`${items.slice(0, splitAt + 1).map((item) => item.text).join(" ")}\t${items.slice(splitAt + 1).map((item) => item.text).join(" ")}`);
+      }
+    });
+  }
+  return parseImportFile(lines.filter(Boolean).join("\n"), fileName);
+}
+
+function parseDocxFile(data, fileName) {
+  const archive = XLSX.CFB.read(new Uint8Array(data), { type: "buffer" });
+  const index = archive.FullPaths.findIndex((path) => /word\/document\.xml$/i.test(path));
+  const content = archive.FileIndex[index]?.content;
+  if (index < 0 || !content) throw new Error("Dokument Word nie zawiera tekstu do zaimportowania.");
+  const xml = new TextDecoder("utf-8").decode(new Uint8Array(content));
+  const text = xml
+    .replace(/<w:tab\b[^>]*\/>/g, "\t")
+    .replace(/<\/w:tc>/g, "\t")
+    .replace(/<\/w:tr>/g, "\n")
+    .replace(/<\/w:p>/g, "\n")
+    .replace(/<[^>]+>/g, "");
+  const decoded = new DOMParser().parseFromString(`<body>${text}</body>`, "text/html").body.textContent || "";
+  return parseImportFile(decoded.replace(/\t+\n/g, "\n"), fileName);
+}
+
+function parseRtfIfNeeded(text, fileName) {
+  if (!/\.rtf$/i.test(fileName)) return text;
+  return text
+    .replace(/\\par[d]?\b/g, "\n")
+    .replace(/\\tab\b/g, "\t")
+    .replace(/\\u(-?\d+)\??/g, (_, code) => String.fromCharCode(Number(code) < 0 ? Number(code) + 65536 : Number(code)))
+    .replace(/\\'[0-9a-fA-F]{2}/g, (value) => String.fromCharCode(parseInt(value.slice(2), 16)))
+    .replace(/\{\\[^{}]+\}|[{}]|\\[a-z]+-?\d* ?/gi, "");
 }
 
 function loadExcelLibrary() {
@@ -455,12 +537,12 @@ function parseExcelFile(data, fileName) {
     const columns = detectExcelColumns(rows);
     if (!columns) return null;
     const cards = rows.slice(columns.headerRow + 1).map((row) => ({
-      front: row[columns.japaneseColumn] || "",
-      back: row[columns.translationColumn] || "",
-    })).filter((card) => card.front && card.back && containsJapanese(card.front));
+      front: row[columns.frontColumn] || "",
+      back: row[columns.backColumn] || "",
+    })).filter((card) => card.front && card.back);
     return cards.length ? { name: sheetName.trim() || "Słówka", cards } : null;
   }).filter(Boolean);
-  return { sets, suggestedFolder: "Japoński" };
+  return { sets, suggestedFolder: fileName.replace(/\.[^.]+$/, "").trim() || "Importowane słówka" };
 }
 
 function normalizeHeader(value) {
@@ -472,24 +554,26 @@ function containsJapanese(value) {
 }
 
 function detectExcelColumns(rows) {
-  const japaneseHeaders = ["単語", "日本語", "japonski", "japanese", "japonés", "japones", "kana", "hiragana", "katakana", "word"];
-  const translationHeaders = ["意味", "訳", "tlumaczenie", "polski", "polish", "translation", "meaning", "english", "angielski", "espanol", "spanish", "hiszpanski", "significado"];
+  const languageHeaders = ["単語", "日本語", "意味", "訳", "slowo", "wyrazenie", "tlumaczenie", "word", "front", "back", "translation", "meaning", "polski", "polish", "japonski", "japanese", "japones", "english", "angielski", "espanol", "spanish", "hiszpanski", "niemiecki", "german", "francuski", "french", "wloski", "italian", "portugalski", "portuguese", "ukrainski", "ukrainian", "kana", "hiragana", "katakana"];
   const searchLimit = Math.min(rows.length, 30);
 
   for (let rowIndex = 0; rowIndex < searchLimit; rowIndex++) {
     const headers = rows[rowIndex].map(normalizeHeader);
-    const japaneseColumn = headers.findIndex((header) => japaneseHeaders.some((name) => header === name || header.includes(name)));
-    const translationColumn = headers.findIndex((header, index) => index !== japaneseColumn && translationHeaders.some((name) => header === name || header.includes(name)));
-    if (japaneseColumn >= 0 && translationColumn >= 0) return { headerRow: rowIndex, japaneseColumn, translationColumn };
+    const matchingColumns = headers
+      .map((header, column) => languageHeaders.some((name) => header === name || header.includes(name)) ? column : -1)
+      .filter((column) => column >= 0);
+    if (matchingColumns.length >= 2) return { headerRow: rowIndex, frontColumn: matchingColumns[0], backColumn: matchingColumns[1] };
   }
 
   const maxColumns = Math.max(0, ...rows.map((row) => row.length));
   const samples = Array.from({ length: maxColumns }, (_, column) => rows.slice(0, 80).map((row) => row[column]).filter(Boolean));
-  const japaneseColumn = samples.map((values) => values.filter(containsJapanese).length).reduce((best, score, index, scores) => score > scores[best] ? index : best, 0);
-  const translationColumn = samples.map((values, column) => column === japaneseColumn ? -1 : values.filter((value) => !containsJapanese(value) && /[A-Za-zÀ-žĄĆĘŁŃÓŚŹŻąćęłńóśźż]/.test(value) && String(value).length > 1).length)
-    .reduce((best, score, index, scores) => score > scores[best] ? index : best, 0);
-  if (!samples[japaneseColumn]?.some(containsJapanese) || translationColumn === japaneseColumn) return null;
-  return { headerRow: -1, japaneseColumn, translationColumn };
+  const populatedColumns = samples
+    .map((values, column) => ({ column, count: values.length }))
+    .filter(({ count }) => count > 0)
+    .sort((a, b) => b.count - a.count || a.column - b.column);
+  if (populatedColumns.length < 2) return null;
+  const selected = populatedColumns.slice(0, 2).sort((a, b) => a.column - b.column);
+  return { headerRow: -1, frontColumn: selected[0].column, backColumn: selected[1].column };
 }
 
 function parseImportFile(text, fileName) {
@@ -516,7 +600,7 @@ function parseImportFile(text, fileName) {
 }
 
 function detectSeparator(lines) {
-  const sample = lines.slice(0, 5).join("\n");
+  const sample = lines.slice(0, 50).join("\n");
   if (sample.includes("\t")) return "\t";
   if (sample.includes(";")) return ";";
   if (sample.includes(",")) return ",";

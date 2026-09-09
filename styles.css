@@ -159,6 +159,7 @@ h1 {
 
 .folder-card:hover, .set-card:hover { transform: translateY(-4px); border-color: #ccd5cc; box-shadow: var(--shadow); }
 .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.card-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
 .folder-icon, .set-icon {
   width: 52px;
   height: 52px;
@@ -221,7 +222,9 @@ h1 {
 .list-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 22px 24px; border-bottom: 1px solid var(--line); }
 .list-toolbar h2 { margin: 0; font: 800 20px "Manrope", sans-serif; }
 .word-list { margin: 0; padding: 0; list-style: none; }
-.word-row { display: grid; grid-template-columns: 34px minmax(0,1fr) minmax(0,1fr) 42px; align-items: center; gap: 18px; padding: 18px 24px; border-bottom: 1px solid var(--line); }
+.word-row { display: grid; grid-template-columns: 34px minmax(0,1fr) minmax(0,1fr) auto; align-items: center; gap: 18px; padding: 18px 24px; border-bottom: 1px solid var(--line); }
+.word-actions { display: flex; align-items: center; gap: 6px; }
+textarea.input { resize: vertical; padding: 12px 15px; line-height: 1.5; }
 .word-row:last-child { border-bottom: 0; }
 .word-row:hover { background: #fafbf8; }
 .status-icon { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; }
@@ -354,9 +357,9 @@ h1 {
   .hero-actions .btn { flex: 1; }
   .grid { grid-template-columns: 1fr; }
   .folder-card, .set-card { min-height: 190px; }
-  .word-row { grid-template-columns: 30px minmax(0,1fr) 38px; gap: 11px; padding: 16px; }
+  .word-row { grid-template-columns: 30px minmax(0,1fr) auto; gap: 11px; padding: 16px; }
   .word-secondary { grid-column: 2; }
-  .word-row > .icon-btn { grid-column: 3; grid-row: 1 / span 2; }
+  .word-actions { grid-column: 3; grid-row: 1 / span 2; flex-direction: column; }
   .list-toolbar { align-items: flex-start; padding: 18px 16px; }
   .list-toolbar .btn span { display: none; }
   .modal { padding: 22px; }

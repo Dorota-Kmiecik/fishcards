@@ -21,6 +21,8 @@ const state = {
   data: loadData(),
   route: { page: "home", folderId: null, setId: null },
   modal: null,
+  editingCardId: null,
+  renameTarget: null,
   draftCards: [],
   importDraft: null,
   study: null,
@@ -119,7 +121,7 @@ function folderCard(folder) {
   return `<article class="folder-card" data-action="open-folder" data-id="${folder.id}" tabindex="0">
     <div class="card-top">
       <span class="folder-icon">${icons.folder}</span>
-      <button class="icon-btn" data-action="delete-folder" data-id="${folder.id}" aria-label="Usuń folder ${escapeHtml(folder.name)}">${icons.trash}</button>
+      <div class="card-actions"><button class="btn btn-secondary" data-action="rename-folder" data-id="${folder.id}">Zmień nazwę</button><button class="icon-btn" data-action="delete-folder" data-id="${folder.id}" aria-label="Usuń folder ${escapeHtml(folder.name)}">${icons.trash}</button></div>
     </div>
     <h3>${escapeHtml(folder.name)}</h3>
     <div class="meta">${folder.sets.length} ${plural(folder.sets.length, "zestaw", "zestawy", "zestawów")} · ${cardCount} ${plural(cardCount, "fiszka", "fiszki", "fiszek")}</div>
@@ -147,7 +149,7 @@ function setCard(set) {
   const answered = known + unknown;
   const percent = set.cards.length ? Math.round((known / set.cards.length) * 100) : 0;
   return `<article class="set-card" data-action="open-set" data-id="${set.id}" tabindex="0">
-    <div class="card-top"><span class="set-icon">${icons.cards}</span><button class="icon-btn" data-action="delete-set" data-id="${set.id}" aria-label="Usuń zestaw ${escapeHtml(set.name)}">${icons.trash}</button></div>
+    <div class="card-top"><span class="set-icon">${icons.cards}</span><div class="card-actions"><button class="btn btn-secondary" data-action="rename-set" data-id="${set.id}">Zmień nazwę</button><button class="icon-btn" data-action="delete-set" data-id="${set.id}" aria-label="Usuń zestaw ${escapeHtml(set.name)}">${icons.trash}</button></div></div>
     <h3>${escapeHtml(set.name)}</h3>
     <div class="meta">${set.cards.length} ${plural(set.cards.length, "fiszka", "fiszki", "fiszek")}</div>
     <div class="card-footer" style="display:block">
@@ -195,7 +197,7 @@ function wordRow(card) {
   return `<li class="word-row">
     <span class="status-icon ${statusClass}" title="${label}" aria-label="${label}">${statusIcon}</span>
     <span class="word-primary">${escapeHtml(card.front)}</span><span class="word-secondary">${escapeHtml(card.back)}</span>
-    <button class="icon-btn" data-action="delete-card" data-id="${card.id}" aria-label="Usuń fiszkę">${icons.trash}</button>
+    <div class="word-actions"><button class="btn btn-secondary" data-action="edit-card" data-id="${card.id}">Edytuj</button><button class="icon-btn" data-action="delete-card" data-id="${card.id}" aria-label="Usuń fiszkę">${icons.trash}</button></div>
   </li>`;
 }
 
@@ -208,8 +210,14 @@ function renderModal() {
   if (!state.modal) return "";
   if (state.modal === "folder") return nameModal("Nowy folder", "Jak chcesz nazwać folder?", "Np. Hiszpański", "create-folder", "Utwórz folder");
   if (state.modal === "set") return nameModal("Nowy zestaw", "Nadaj zestawowi krótką, łatwą do rozpoznania nazwę.", "Np. Jedzenie i restauracja", "start-set", "Dalej");
+  if (state.modal === "rename") {
+    const target = getRenameTarget();
+    if (!target) return "";
+    return nameModal(state.renameTarget.type === "folder" ? "Zmień nazwę folderu" : "Zmień nazwę zestawu", "Wpisz nową nazwę.", "Nazwa", "rename", "Zapisz zmiany", target.name);
+  }
   if (state.modal === "cards-wizard") return cardsWizard();
   if (state.modal === "card") return cardModal();
+  if (state.modal === "edit-card") return editCardModal();
   if (state.modal === "study-mode") return studyModeModal();
   if (state.modal === "finish") return finishModal();
   if (state.modal === "confirm") return confirmationModal();
@@ -217,9 +225,15 @@ function renderModal() {
   return "";
 }
 
-function nameModal(title, copy, placeholder, action, button) {
+function getRenameTarget() {
+  if (!state.renameTarget) return null;
+  const folder = getFolder(state.renameTarget.folderId);
+  return state.renameTarget.type === "folder" ? folder : getSet(folder, state.renameTarget.setId);
+}
+
+function nameModal(title, copy, placeholder, action, button, value = "") {
   return modalWrap(`<div class="modal-head"><div><h2>${title}</h2><p class="modal-copy">${copy}</p></div><button class="icon-btn close-btn" data-action="close-modal" aria-label="Zamknij">${icons.close}</button></div>
-    <form data-form="${action}"><div class="field"><label for="name-input">Nazwa</label><input class="input" id="name-input" name="name" maxlength="60" placeholder="${placeholder}" autocomplete="off" autofocus /></div><div class="modal-actions"><button type="button" class="btn btn-secondary" data-action="close-modal">Anuluj</button><button class="btn btn-primary" type="submit">${button}</button></div></form>`);
+    <form data-form="${action}"><div class="field"><label for="name-input">Nazwa</label><input class="input" id="name-input" name="name" maxlength="${Math.max(60, value.length)}" value="${escapeHtml(value).replaceAll('"', '&quot;')}" placeholder="${placeholder}" autocomplete="off" autofocus /></div><div class="modal-actions"><button type="button" class="btn btn-secondary" data-action="close-modal">Anuluj</button><button class="btn btn-primary" type="submit">${button}</button></div></form>`);
 }
 
 function cardsWizard() {
@@ -231,6 +245,17 @@ function cardsWizard() {
     </form>
     ${state.draftCards.length ? `<div class="draft-list">${state.draftCards.map((card, index) => `<div class="draft-row"><strong>${escapeHtml(card.front)}</strong><span class="draft-arrow">→</span><span>${escapeHtml(card.back)}</span><button class="icon-btn" data-action="delete-draft" data-index="${index}" aria-label="Usuń">${icons.trash}</button></div>`).join("")}</div>` : ""}`,
     "modal-wide");
+}
+
+function editCardModal() {
+  const card = getSet()?.cards.find((card) => card.id === state.editingCardId);
+  if (!card) return "";
+  return modalWrap(`<div class="modal-head"><div><h2>Edytuj słówko</h2><p class="modal-copy">Zmień słowo lub jego tłumaczenie.</p></div><button class="icon-btn close-btn" data-action="close-modal" aria-label="Zamknij">${icons.close}</button></div>
+    <form data-form="edit-card">
+      <div class="field"><label for="front-input">Słowo</label><textarea class="input" id="front-input" name="front" rows="2" autofocus>${escapeHtml(card.front)}</textarea></div>
+      <div class="field"><label for="back-input">Tłumaczenie</label><textarea class="input" id="back-input" name="back" rows="2">${escapeHtml(card.back)}</textarea></div>
+      <div class="modal-actions"><button type="button" class="btn btn-secondary" data-action="close-modal">Anuluj</button><button class="btn btn-primary" type="submit">Zapisz zmiany</button></div>
+    </form>`);
 }
 
 function cardModal() {
@@ -329,6 +354,7 @@ function bindEvents() {
   document.querySelectorAll("[data-action]").forEach((element) => {
     element.addEventListener("click", handleAction);
     if (element.matches("[tabindex='0']")) element.addEventListener("keydown", (event) => {
+      if (event.target !== element) return;
       if (event.key === "Enter" || event.key === " ") { event.preventDefault(); element.click(); }
     });
   });
@@ -342,7 +368,13 @@ function handleAction(event) {
   const target = event.currentTarget;
   const action = target.dataset.action;
   if (action === "backdrop" && target !== event.target) return;
-  if (["delete-folder", "delete-set", "delete-card", "delete-draft"].includes(action)) event.stopPropagation();
+  if (["delete-folder", "delete-set", "delete-card", "delete-draft", "rename-folder", "rename-set"].includes(action)) event.stopPropagation();
+  if (action === "rename-folder" || action === "rename-set") {
+    state.renameTarget = action === "rename-folder"
+      ? { type: "folder", folderId: target.dataset.id }
+      : { type: "set", folderId: state.route.folderId, setId: target.dataset.id };
+    state.modal = "rename";
+  }
   if (action === "go-home") state.route = { page: "home", folderId: null, setId: null };
   if (action === "open-folder") state.route = { page: "folder", folderId: target.dataset.id, setId: null };
   if (action === "back-folder") state.route = { page: "folder", folderId: state.route.folderId, setId: null };
@@ -350,6 +382,10 @@ function handleAction(event) {
   if (action === "open-folder-modal") state.modal = "folder";
   if (action === "open-set-modal") state.modal = "set";
   if (action === "open-card-modal") state.modal = "card";
+  if (action === "edit-card") {
+    state.editingCardId = target.dataset.id;
+    state.modal = "edit-card";
+  }
   if (action === "choose-import-file") document.querySelector("#file-import-input")?.click();
   if (action === "close-modal" || action === "backdrop") state.modal = null;
   if (action === "close-import") { state.modal = null; state.importDraft = null; }
@@ -376,6 +412,13 @@ function handleForm(event) {
   const form = event.currentTarget;
   const values = Object.fromEntries(new FormData(form));
   const type = form.dataset.form;
+  if (type === "rename") {
+    if (!values.name.trim()) return showFormError(form, "Wpisz nazwę.");
+    const target = getRenameTarget();
+    if (!target) return showFormError(form, "Nie znaleziono folderu lub zestawu.");
+    target.name = values.name.trim();
+    saveData(); state.modal = null; state.renameTarget = null; toast("Nazwa została zmieniona");
+  }
   if (type === "create-folder") {
     if (!values.name.trim()) return showFormError(form, "Wpisz nazwę folderu.");
     state.data.folders.push({ id: id(), name: values.name.trim(), sets: [] });
@@ -389,6 +432,14 @@ function handleForm(event) {
     if (!values.front.trim() || !values.back.trim()) return showFormError(form, "Uzupełnij słowo i tłumaczenie.");
     state.draftCards.push({ id: id(), front: values.front.trim(), back: values.back.trim(), status: null });
     form.reset();
+  }
+  if (type === "edit-card") {
+    if (!values.front.trim() || !values.back.trim()) return showFormError(form, "Uzupełnij słowo i tłumaczenie.");
+    const card = getSet()?.cards.find((card) => card.id === state.editingCardId);
+    if (!card) return showFormError(form, "Nie znaleziono fiszki do edycji.");
+    card.front = values.front.trim();
+    card.back = values.back.trim();
+    saveData(); state.modal = null; state.editingCardId = null; toast("Zmiany zostały zapisane");
   }
   if (type === "create-card") {
     if (!values.front.trim() || !values.back.trim()) return showFormError(form, "Uzupełnij słowo i tłumaczenie.");

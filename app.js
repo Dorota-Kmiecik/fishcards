@@ -305,8 +305,9 @@ function renderStudy() {
         </div>
       </div>
       <div class="rating-actions">${study.flipped ? `<button class="rate-btn rate-wrong" data-action="rate" data-rating="unknown" aria-label="Nie wiedziałam">${icons.close}</button><button class="rate-btn rate-right" data-action="rate" data-rating="known" aria-label="Wiedziałam">${icons.check}</button>` : `<span class="reveal-note">Najpierw odwróć fiszkę, żeby zobaczyć odpowiedź</span>`}</div>
+      <button class="btn btn-secondary" data-action="edit-card" data-id="${card.id}">Edytuj słówko</button>
     </section>
-    ${state.modal === "finish" ? finishModal() : ""}
+    ${renderModal()}
   </main>`;
 }
 
@@ -846,7 +847,8 @@ function shuffle(items) {
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
-    if (state.route.page === "study") finishStudy(); else state.modal = null;
+    if (state.modal) state.modal = null;
+    else if (state.route.page === "study") finishStudy();
     render();
   }
 });

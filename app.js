@@ -108,12 +108,16 @@ function renderHome() {
         <div class="home-actions">
           <button class="btn btn-secondary" data-action="choose-import-file">${icons.upload}<span>Załącz plik</span></button>
           <button class="btn btn-primary" data-action="open-folder-modal">${icons.plus}<span>Nowy folder</span></button>
-          <input id="file-import-input" type="file" accept=".xlsx,.xls,.csv,.txt,.json,.pdf,.docx,.doc,.rtf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/plain,application/json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/rtf" hidden />
+          ${importFileInput()}
         </div>
       </div>
       ${folders.length ? `<div class="grid">${folders.map(folderCard).join("")}</div>` : `<p class="empty-library-note">Nie masz jeszcze żadnych folderów.</p>`}
     </section>
   </main>`;
+}
+
+function importFileInput(folderId = "") {
+  return `<input id="file-import-input" type="file" data-folder-id="${escapeHtml(folderId)}" accept=".xlsx,.xls,.csv,.txt,.json,.pdf,.docx,.doc,.rtf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/plain,application/json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/rtf" hidden />`;
 }
 
 function folderCard(folder) {
@@ -135,7 +139,7 @@ function renderFolder() {
     <nav class="page-nav" aria-label="Nawigacja"><button class="btn btn-secondary" data-action="go-home">${icons.back} Menu główne</button></nav>
     <section class="hero">
       <div><p class="eyebrow">Folder</p><h1>${escapeHtml(folder.name)}</h1><p class="hero-copy">Wybierz zestaw, aby przejrzeć słówka, albo rozpocznij nowy.</p></div>
-      <div class="hero-actions"><button class="btn btn-primary btn-large" data-action="open-set-modal">${icons.plus}<span>Nowy zestaw</span></button></div>
+      <div class="hero-actions"><button class="btn btn-secondary" data-action="choose-import-file">${icons.upload}<span>Załącz plik</span></button><button class="btn btn-primary btn-large" data-action="open-set-modal">${icons.plus}<span>Nowy zestaw</span></button>${importFileInput(folder.id)}</div>
     </section>
     <section>
       <div class="section-head"><h2>Zestawy <span class="count">${folder.sets.length}</span></h2></div>
@@ -328,6 +332,7 @@ function confirmationModal() {
 function importModal() {
   const draft = state.importDraft;
   if (!draft) return "";
+  const targetFolder = draft.targetFolderId ? getFolder(draft.targetFolderId) : null;
   const totalCards = draft.sets.reduce((sum, set) => sum + set.cards.length, 0);
   const preview = draft.sets.flatMap((set) => set.cards).slice(0, 5);
   const multipleSets = draft.sets.length > 1;
@@ -337,11 +342,11 @@ function importModal() {
   const setNameField = multipleSets ? "" : `<div class="field"><label for="import-set-name">Nazwa zestawu</label><input class="input" id="import-set-name" name="set_name" maxlength="60" value="${escapeHtml(draft.sets[0].name)}" autocomplete="off" /></div>`;
   return modalWrap(`<div class="modal-head"><div><p class="eyebrow">Import z pliku</p><h2>${escapeHtml(draft.fileName)}</h2><p class="modal-copy">Znaleziono ${totalCards} ${plural(totalCards, "fiszkę", "fiszki", "fiszek")} w ${draft.sets.length} ${plural(draft.sets.length, "zestawie", "zestawach", "zestawach")}.</p></div><button class="icon-btn close-btn" data-action="close-import" aria-label="Zamknij">${icons.close}</button></div>
     <form data-form="import-file">
-      <div class="field"><label for="import-folder-name">Nazwa folderu</label><input class="input" id="import-folder-name" name="folder_name" maxlength="60" value="${escapeHtml(draft.suggestedFolder)}" autocomplete="off" autofocus /></div>
+      ${draft.targetFolderId ? `<p class="modal-copy">Dodaj do folderu: <strong>${escapeHtml(targetFolder?.name || "Folder został usunięty")}</strong></p>` : `<div class="field"><label for="import-folder-name">Nazwa folderu</label><input class="input" id="import-folder-name" name="folder_name" maxlength="60" value="${escapeHtml(draft.suggestedFolder)}" autocomplete="off" autofocus /></div>`}
       ${setNameField}
       ${setsSummary}
       <div class="import-preview"><strong>Podgląd fiszek</strong>${preview.map((card) => `<div class="import-preview-row"><span>${escapeHtml(card.front)}</span><span>→</span><span>${escapeHtml(card.back)}</span></div>`).join("")}${totalCards > preview.length ? `<small>i jeszcze ${totalCards - preview.length}…</small>` : ""}</div>
-      <div class="modal-actions"><button type="button" class="btn btn-secondary" data-action="close-import">Anuluj</button><button class="btn btn-primary" type="submit">${icons.upload} Utwórz folder i fiszki</button></div>
+      <div class="modal-actions"><button type="button" class="btn btn-secondary" data-action="close-import">Anuluj</button><button class="btn btn-primary" type="submit">${icons.upload} ${draft.targetFolderId ? (multipleSets ? "Dodaj zestawy" : "Dodaj zestaw") : "Utwórz folder i fiszki"}</button></div>
     </form>`, "modal-wide");
 }
 
@@ -387,7 +392,10 @@ function handleAction(event) {
     state.editingCardId = target.dataset.id;
     state.modal = "edit-card";
   }
-  if (action === "choose-import-file") document.querySelector("#file-import-input")?.click();
+  if (action === "choose-import-file") {
+    document.querySelector("#file-import-input")?.click();
+    return;
+  }
   if (action === "close-modal" || action === "backdrop") state.modal = null;
   if (action === "close-import") { state.modal = null; state.importDraft = null; }
   if (action === "cancel-wizard") { state.modal = null; state.draftCards = []; state.pendingSetName = ""; }
@@ -448,9 +456,13 @@ function handleForm(event) {
     saveData(); state.modal = null; toast("Fiszka została dodana");
   }
   if (type === "import-file") {
-    const folderName = values.folder_name.trim();
+    if (!state.importDraft) return;
+    const targetFolderId = state.importDraft.targetFolderId;
+    if (targetFolderId && !getFolder(targetFolderId)) return showFormError(form, "Folder został usunięty. Wybierz plik ponownie w innym folderze.");
+    const folderName = (values.folder_name || "").trim();
     const setName = (values.set_name || "").trim();
-    if (!folderName || (state.importDraft.sets.length === 1 && !setName)) return showFormError(form, "Wpisz nazwę folderu i zestawu.");
+    if (!targetFolderId && !folderName) return showFormError(form, "Wpisz nazwę folderu.");
+    if (state.importDraft.sets.length === 1 && !setName) return showFormError(form, "Wpisz nazwę zestawu.");
     importCards(folderName, setName);
   }
   render();
@@ -459,6 +471,8 @@ function handleForm(event) {
 function handleImportFile(event) {
   const file = event.target.files?.[0];
   if (!file) return;
+  const targetFolderId = event.target.dataset.folderId || null;
+  event.target.value = "";
   const reader = new FileReader();
   const isExcel = /\.(xlsx|xls)$/i.test(file.name);
   const isPdf = /\.pdf$/i.test(file.name);
@@ -475,7 +489,7 @@ function handleImportFile(event) {
         : isDocx ? parseDocxFile(reader.result, file.name)
         : parseImportFile(parseRtfIfNeeded(String(reader.result || ""), file.name), file.name);
       if (!parsed.sets.length || !parsed.sets.some((set) => set.cards.length)) throw new Error("Nie znaleziono par słowo–tłumaczenie.");
-      state.importDraft = { ...parsed, fileName: file.name };
+      state.importDraft = { ...parsed, fileName: file.name, targetFolderId };
       state.modal = "import";
       render();
     } catch (error) {
@@ -686,27 +700,29 @@ function looksLikeHeader(row) {
 }
 
 function importCards(folderName, setName) {
-  const baseName = folderName;
-  let uniqueName = baseName;
-  let suffix = 2;
-  while (state.data.folders.some((folder) => folder.name.toLowerCase() === uniqueName.toLowerCase())) {
-    uniqueName = `${baseName} (${suffix++})`;
-  }
-  const folder = {
+  const draft = state.importDraft;
+  let folder = draft.targetFolderId ? getFolder(draft.targetFolderId) : null;
+  if (draft.targetFolderId && !folder) return;
+  const sets = draft.sets.map((set) => ({
     id: id(),
-    name: uniqueName,
-    sets: state.importDraft.sets.map((set, index) => ({
-      id: id(),
-      name: state.importDraft.sets.length === 1 && setName ? setName : set.name,
-      cards: set.cards.map((card) => ({ id: id(), front: card.front, back: card.back, status: null })),
-    })),
-  };
-  state.data.folders.push(folder);
+    name: draft.sets.length === 1 && setName ? setName : set.name,
+    cards: set.cards.map((card) => ({ id: id(), front: card.front, back: card.back, status: null })),
+  }));
+  if (!folder) {
+    let uniqueName = folderName;
+    let suffix = 2;
+    while (state.data.folders.some((item) => item.name.toLowerCase() === uniqueName.toLowerCase())) {
+      uniqueName = `${folderName} (${suffix++})`;
+    }
+    folder = { id: id(), name: uniqueName, sets: [] };
+    state.data.folders.push(folder);
+  }
+  folder.sets.push(...sets);
   saveData();
   state.importDraft = null;
   state.modal = null;
   state.route = { page: "folder", folderId: folder.id, setId: null };
-  const totalCards = folder.sets.reduce((sum, set) => sum + set.cards.length, 0);
+  const totalCards = sets.reduce((sum, set) => sum + set.cards.length, 0);
   toast(`Zaimportowano ${totalCards} ${plural(totalCards, "fiszkę", "fiszki", "fiszek")}`);
 }
 
